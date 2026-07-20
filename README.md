@@ -10,8 +10,6 @@ EchoAI is a deep learning-based clinical application that enhances echocardiogra
 
 The application provides an interactive dashboard where users can upload ultrasound images, visualize AI-generated segmentation masks, and view important cardiac measurements.
 
-This project was developed as a BE Computer Science Engineering Major Project.
-
 ---
 
 ## Features
