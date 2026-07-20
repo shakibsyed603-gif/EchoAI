@@ -1,0 +1,10 @@
+Flask==3.0.3
+Flask-Cors==4.0.0
+opencv-python
+numpy
+fpdf2==2.8.1
+nibabel
+torch
+torchvision
+supabase
+python-dotenv
