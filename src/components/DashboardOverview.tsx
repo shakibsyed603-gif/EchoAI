@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Activity, CheckCircle2, Brain, Zap, Server, TrendingUp, ArrowUpRight, Upload, FileText, Heart } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useStudies } from '../hooks/useStudies';
 
 interface DashboardOverviewProps {
   onViewReport?: (study: any) => void;
@@ -30,47 +30,11 @@ function relativeTime(dateStr: string): string {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function DashboardOverview({ onViewReport }: DashboardOverviewProps) {
-  const [studies, setStudies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { studies, loading, error } = useStudies();
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
-  const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null);
 
-  // ── Fetch studies ────────────────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('studies')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (!cancelled) {
-          if (error) {
-            console.error('Dashboard: Supabase query error', error);
-            setSupabaseConnected(false);
-            setStudies([]);
-          } else {
-            setSupabaseConnected(true);
-            setStudies(data || []);
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Dashboard: fetch failed', err);
-          setSupabaseConnected(false);
-          setStudies([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    fetchData();
-    return () => { cancelled = true; };
-  }, []);
+  // Derive Supabase connection status from the shared hook's error field
+  const supabaseConnected: boolean | null = loading ? null : error === null;
 
   // ── Backend health check ─────────────────────────────────────────────────
   useEffect(() => {

@@ -20,6 +20,13 @@ import os
 import time
 import supabase_client as sb
 
+try:
+    from enhancement.enhancement_service import enhance_with_residual_cnn as _cnn_enhance
+    _CNN_AVAILABLE = True
+except Exception as _cnn_load_err:
+    print(f"[app.py] Warning: Residual CNN enhancement not available: {_cnn_load_err}")
+    _CNN_AVAILABLE = False
+
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
@@ -59,8 +66,10 @@ def home():
 @app.route("/api/enhance", methods=["POST", "OPTIONS"])
 def enhance_image():
     """
-    REAL image enhancement using OpenCV CLAHE.
-    Takes a raw echocardiogram and returns an enhanced version.
+    Image enhancement endpoint.
+    Supports two pipelines selected via the 'enhancement_model' form field:
+      - 'residual_cnn'  → EchoEnhancerV2 deep learning inference
+      - 'classical'     → CLAHE + NLMeans + Sharpen (original pipeline, default)
     Optionally persists the enhanced image to Supabase when study_id is provided.
     """
     if 'image' not in request.files:
@@ -69,6 +78,7 @@ def enhance_image():
     file = request.files['image']
     image_bytes = file.read()
     study_id = request.form.get('study_id')  # optional
+    enhancement_model = request.form.get('enhancement_model', 'classical')  # new param
 
     if len(image_bytes) == 0:
         return jsonify({"error": "Empty image file"}), 400
@@ -84,30 +94,45 @@ def enhance_image():
 
     original_h, original_w = img.shape[:2]
 
-    # ── REAL Enhancement Pipeline ──
-    # 1. Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # ── Enhancement Pipeline (branched by enhancement_model) ──────────────────
+    if enhancement_model == 'residual_cnn' and _CNN_AVAILABLE:
+        # ── Residual CNN branch ──────────────────────────────────────────────
+        print(f"[enhance] Using Residual CNN (EchoEnhancerV2)")
 
-    # 2. Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
+        final_enhanced = _cnn_enhance(img)          # returns uint8 grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # keep for metrics
+        method_label = "Residual CNN (EchoEnhancerV2)"
 
-    # 3. Denoise using Non-Local Means (removes speckle noise)
-    denoised = cv2.fastNlMeansDenoising(enhanced, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    else:
+        # ── Classical pipeline (original, unchanged) ─────────────────────────
+        if enhancement_model == 'residual_cnn' and not _CNN_AVAILABLE:
+            print("[enhance] Residual CNN requested but not available — falling back to classical")
+        else:
+            print(f"[enhance] Using Classical enhancement (CLAHE + NLMeans + Sharpen)")
 
-    # 4. Sharpen edges (for wall boundaries)
-    kernel_sharpen = np.array([[-1, -1, -1],
-                                [-1,  9, -1],
-                                [-1, -1, -1]])
-    sharpened = cv2.filter2D(denoised, -1, kernel_sharpen)
+        # 1. Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # 5. Blend: 70% sharpened + 30% denoised (balance detail vs noise)
-    final_enhanced = cv2.addWeighted(sharpened, 0.7, denoised, 0.3, 0)
+        # 2. Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+
+        # 3. Denoise using Non-Local Means (removes speckle noise)
+        denoised = cv2.fastNlMeansDenoising(enhanced, None, h=10, templateWindowSize=7, searchWindowSize=21)
+
+        # 4. Sharpen edges (for wall boundaries)
+        kernel_sharpen = np.array([[-1, -1, -1],
+                                    [-1,  9, -1],
+                                    [-1, -1, -1]])
+        sharpened = cv2.filter2D(denoised, -1, kernel_sharpen)
+
+        # 5. Blend: 70% sharpened + 30% denoised (balance detail vs noise)
+        final_enhanced = cv2.addWeighted(sharpened, 0.7, denoised, 0.3, 0)
+        method_label = "CLAHE + NLMeans + Sharpen"
 
     processing_time = f"{time.time() - t_start:.2f}s"
 
-    # Calculate quality metrics
-    # SNR improvement
+    # Calculate quality metrics (shared by both branches)
     noise_before = np.std(gray.astype(float))
     noise_after = np.std(final_enhanced.astype(float))
     noise_reduction = ((noise_before - noise_after) / noise_before) * 100 if noise_before > 0 else 0
@@ -121,7 +146,7 @@ def enhance_image():
     enhanced_png_bytes = buffer.tobytes()
     enhanced_base64 = base64.b64encode(enhanced_png_bytes).decode('utf-8')
 
-    print(f"Enhanced image: {original_w}x{original_h} -> PSNR: {psnr:.1f}, Noise reduction: {noise_reduction:.1f}%")
+    print(f"Enhanced image: {original_w}x{original_h} -> PSNR: {psnr:.1f}, Noise reduction: {noise_reduction:.1f}% [{method_label}]")
 
     # ── Supabase persistence (best-effort) ──
     enhanced_image_url = None
@@ -153,7 +178,7 @@ def enhance_image():
             "psnr": f"{psnr:.1f}",
             "noise_reduction": f"{abs(noise_reduction):.0f}%",
             "resolution": f"{original_w}x{original_h}",
-            "method": "CLAHE + NLMeans + Sharpen"
+            "method": method_label
         },
         "processing_time": processing_time,
     }

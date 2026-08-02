@@ -21,6 +21,7 @@ import ArchivePage from './components/ArchivePage';
 import ReportsPage from './components/ReportsPage';
 import { AIFindingsPanel } from './components/AIFindingsPanel';
 import { supabase } from './lib/supabase';
+import { StudiesProvider } from './hooks/useStudies';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ export default function App() {
   const [segmentedImage, setSegmentedImage] = useState<string | null>(null);
   const [binaryMask, setBinaryMask] = useState<string | null>(null);
   const [processingState, setProcessingState] = useState<ProcessingState>('idle');
+  const [enhancementModel, setEnhancementModel] = useState<'classical' | 'cnn'>('cnn');
+  const [segmentationModel, setSegmentationModel] = useState<'unet'>('unet');
   const [showSuccess, setShowSuccess] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -207,6 +210,7 @@ export default function App() {
       const formData = new FormData();
       formData.append('image', uploadedFile);
       if (currentStudyId) formData.append('study_id', currentStudyId);
+      formData.append("enhancement_model", enhancementModel === "cnn" ? "residual_cnn" : "classical");
 
       const response = await fetch('/api/enhance', {
         method: 'POST',
@@ -235,6 +239,7 @@ export default function App() {
       const formData = new FormData();
       formData.append('image', uploadedFile);
       if (currentStudyId) formData.append('study_id', currentStudyId);
+      formData.append('model', segmentationModel);
 
       const response = await fetch('/api/analyze', {
         method: 'POST',
@@ -347,6 +352,7 @@ export default function App() {
   }
 
   return (
+    <StudiesProvider>
     <div className="app-shell">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} patientData={patientData} onPatientUpdate={handlePatientUpdate} />
 
@@ -427,6 +433,89 @@ export default function App() {
 
               {/* RIGHT: Controls & Clinical Info Sidebar */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+                {/* Model Selection Panel */}
+                <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {/* Enhancement Model */}
+                  <div>
+                    <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: '0.75rem' }}>Image Enhancement Model</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div
+                        onClick={() => setEnhancementModel('classical')}
+                        style={{
+                          padding: '0.75rem 1rem',
+                          borderRadius: '8px',
+                          border: `1px solid ${enhancementModel === 'classical' ? '#38bdf8' : 'var(--surface-border)'}`,
+                          background: enhancementModel === 'classical' ? 'rgba(56,189,248,0.05)' : 'var(--surface-base)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.875rem',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${enhancementModel === 'classical' ? '#38bdf8' : 'var(--text-muted)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {enhancementModel === 'classical' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#38bdf8' }} />}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: enhancementModel === 'classical' ? '#38bdf8' : 'var(--text-secondary)' }}>Classical Enhancement</p>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '0.125rem' }}>CLAHE + Denoising + Sharpen</p>
+                        </div>
+                      </div>
+
+                      <div
+                        onClick={() => setEnhancementModel('cnn')}
+                        style={{
+                          padding: '0.75rem 1rem',
+                          borderRadius: '8px',
+                          border: `1px solid ${enhancementModel === 'cnn' ? '#38bdf8' : 'var(--surface-border)'}`,
+                          background: enhancementModel === 'cnn' ? 'rgba(56,189,248,0.05)' : 'var(--surface-base)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.875rem',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${enhancementModel === 'cnn' ? '#38bdf8' : 'var(--text-muted)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {enhancementModel === 'cnn' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#38bdf8' }} />}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: enhancementModel === 'cnn' ? '#38bdf8' : 'var(--text-secondary)' }}>Residual CNN (Recommended)</p>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '0.125rem' }}>Deep Learning Image Enhancement</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Segmentation Model */}
+                  <div>
+                    <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: '0.75rem' }}>Segmentation Model</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div
+                        style={{
+                          padding: '0.75rem 1rem',
+                          borderRadius: '8px',
+                          border: '1px solid #7C3AED',
+                          background: 'rgba(124,58,237,0.05)',
+                          cursor: 'default',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.875rem'
+                        }}
+                      >
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7C3AED' }} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: '#7C3AED' }}>U-Net (CAMUS)</p>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '0.125rem' }}>Semantic segmentation model</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <UploadZone onFileUpload={handleFileUpload} uploadedFile={uploadedFile} onLoadDemo={handleLoadDemo} />
 
                 {uploadedFile && (
@@ -467,7 +556,11 @@ export default function App() {
                       <div className="animate-fade-in" style={{ padding: '0.75rem', background: 'var(--surface-base)', borderRadius: 8, border: '1px dashed var(--surface-border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                           <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                            {processingState === 'enhancing' ? 'Running CNN denoiser (ResNet-50)...' : 'Running U-Net segmentation...'}
+                            {processingState === 'enhancing'
+                              ? (enhancementModel === 'cnn'
+                                ? 'Running Residual CNN (EchoEnhancerV2)...'
+                                : 'Running CLAHE + Denoising + Sharpen...')
+                              : 'Running U-Net segmentation...'}
                           </span>
                           <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                             {processingState === 'enhancing' ? 'GPU active' : 'Tensor cores active'}
@@ -566,7 +659,9 @@ export default function App() {
         aiMetrics={aiMetrics}
         enhanceMetrics={enhanceMetrics}
         patientData={patientData}
+        enhancementModel={enhancementModel}
       />
     </div>
+    </StudiesProvider>
   );
 }

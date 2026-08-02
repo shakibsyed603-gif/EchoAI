@@ -15,6 +15,7 @@ interface ReportModalProps {
   aiMetrics: any;
   enhanceMetrics: any;
   patientData: PatientData;
+  enhancementModel?: 'classical' | 'cnn';
 }
 
 export default function ReportModal({
@@ -26,6 +27,7 @@ export default function ReportModal({
   aiMetrics,
   enhanceMetrics,
   patientData,
+  enhancementModel = 'classical',
 }: ReportModalProps) {
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -184,7 +186,7 @@ export default function ReportModal({
                   <img src={enhancedImage} alt="Enhanced" className="rpt-img" />
                   <div className="rpt-img-label">
                     <span className="rpt-img-badge enhanced">ENHANCED</span>
-                    CLAHE + NLMeans
+                    {enhancementModel === 'cnn' ? 'Residual CNN (EchoEnhancerV2)' : 'CLAHE + NLMeans'}
                   </div>
                 </div>
               )}

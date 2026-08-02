@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useStudies } from '../hooks/useStudies';
 import { ClipboardList, Download, Eye, Clock, Activity, Loader2, AlertCircle } from 'lucide-react';
 
 interface ReportsPageProps {
@@ -7,33 +6,7 @@ interface ReportsPageProps {
 }
 
 export default function ReportsPage({ onViewReport }: ReportsPageProps) {
-  const [studies, setStudies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchCompletedStudies();
-  }, []);
-
-  async function fetchCompletedStudies() {
-    try {
-      setLoading(true);
-      setError(null);
-      // Fetch only studies that have basic report data (we consider them completed)
-      const { data, error } = await supabase
-        .from('studies')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setStudies(data || []);
-    } catch (err: any) {
-      console.error("Error fetching studies:", err);
-      setError(err.message || "Failed to load clinical reports");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { studies, loading, error, refresh } = useStudies();
 
   const handleDownloadPDF = async (study: any) => {
     try {
@@ -85,7 +58,7 @@ export default function ReportsPage({ onViewReport }: ReportsPageProps) {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', gap: '1rem', color: 'var(--text-primary)' }}>
             <AlertCircle style={{ width: 48, height: 48, color: 'var(--danger-color)' }} />
             <p style={{ color: 'var(--danger-color)', fontSize: '15px', fontWeight: 600 }}>{error}</p>
-            <button onClick={fetchCompletedStudies} style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: 'var(--surface-border)', color: 'var(--text-primary)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', border: 'none' }}>
+            <button onClick={refresh} style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: 'var(--surface-border)', color: 'var(--text-primary)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', border: 'none' }}>
               Try Again
             </button>
           </div>

@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useStudies } from '../hooks/useStudies';
 import {
   Search, Filter, Calendar, Trash2, Download, Eye,
   ChevronLeft, ChevronRight, Activity, Clock, User, AlertTriangle, Archive
@@ -11,9 +12,8 @@ interface ArchivePageProps {
 }
 
 export default function ArchivePage({ onViewReport }: ArchivePageProps) {
-  const [studies, setStudies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  
+  const { studies, loading, refresh } = useStudies();
+
   // Filtering and Sorting state
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('All Time');
@@ -26,25 +26,6 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
 
   // Delete Confirmation State
   const [studyToDelete, setStudyToDelete] = useState<any>(null);
-
-  useEffect(() => {
-    fetchStudies();
-  }, []);
-
-  async function fetchStudies() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('studies')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setStudies(data);
-    } else {
-      console.error("Error fetching studies", error);
-    }
-    setLoading(false);
-  }
 
   const handleDownloadPDF = async () => {
     try {
@@ -75,14 +56,20 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
         .eq('id', studyToDelete.id);
 
       if (error) {
-        console.error("Error deleting study:", error);
-        alert("Failed to delete study.");
+        console.error('[ArchivePage] Delete error:', {
+          message: error.message,
+          code:    error.code,
+          details: error.details,
+          hint:    error.hint,
+        });
+        alert('Failed to delete study.');
       } else {
-        setStudies(studies.filter(s => s.id !== studyToDelete.id));
         setStudyToDelete(null);
+        // Re-sync the shared studies cache after deletion
+        refresh();
       }
     } catch (e) {
-      console.error(e);
+      console.error('[ArchivePage] Unexpected delete error:', e);
     }
   };
 
@@ -99,11 +86,11 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
         const rId = (`REP-${(s.id || '').substring(0, 4)}`).toLowerCase();
         const dateStr = new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase();
         const status = (s.status || '').toLowerCase();
-        return pName.includes(lowerQuery) || 
-               pId.includes(lowerQuery) || 
-               rId.includes(lowerQuery) || 
-               dateStr.includes(lowerQuery) || 
-               status.includes(lowerQuery);
+        return pName.includes(lowerQuery) ||
+          pId.includes(lowerQuery) ||
+          rId.includes(lowerQuery) ||
+          dateStr.includes(lowerQuery) ||
+          status.includes(lowerQuery);
       });
     }
 
@@ -119,7 +106,7 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
         const studyDate = new Date(s.created_at);
         const diffTime = Math.abs(now.getTime() - studyDate.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+
         if (dateFilter === 'Last 7 Days') return diffDays <= 7;
         if (dateFilter === 'Last 30 Days') return diffDays <= 30;
         return true;
@@ -174,20 +161,20 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
 
       {/* Filters Toolbar */}
       <div className="card" style={{ padding: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        
+
         {/* Search */}
         <div style={{ position: 'relative', flex: '1 1 250px' }}>
           <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: 'var(--text-muted)' }} />
-          <input 
-            type="text" 
-            placeholder="Search by Patient Name or ID..." 
+          <input
+            type="text"
+            placeholder="Search by Patient Name or ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ 
-              width: '100%', padding: '0.6rem 1rem 0.6rem 2.2rem', 
-              background: 'var(--surface-base)', border: '1px solid var(--surface-border)', 
-              borderRadius: 8, color: 'var(--text-primary)', fontSize: '13px', outline: 'none' 
-            }} 
+            style={{
+              width: '100%', padding: '0.6rem 1rem 0.6rem 2.2rem',
+              background: 'var(--surface-base)', border: '1px solid var(--surface-border)',
+              borderRadius: 8, color: 'var(--text-primary)', fontSize: '13px', outline: 'none'
+            }}
           />
         </div>
 
@@ -196,8 +183,8 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
           {/* Date Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-base)', padding: '0.4rem 0.75rem', borderRadius: 8, border: '1px solid var(--surface-border)' }}>
             <Calendar style={{ width: 14, height: 14, color: 'var(--text-muted)' }} />
-            <select 
-              value={dateFilter} 
+            <select
+              value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
               style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '12px', outline: 'none', cursor: 'pointer' }}
             >
@@ -210,8 +197,8 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
           {/* Status Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-base)', padding: '0.4rem 0.75rem', borderRadius: 8, border: '1px solid var(--surface-border)' }}>
             <Filter style={{ width: 14, height: 14, color: 'var(--text-muted)' }} />
-            <select 
-              value={statusFilter} 
+            <select
+              value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '12px', outline: 'none', cursor: 'pointer' }}
             >
@@ -224,8 +211,8 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
           {/* Sort By */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-base)', padding: '0.4rem 0.75rem', borderRadius: 8, border: '1px solid var(--surface-border)' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sort:</span>
-            <select 
-              value={sortBy} 
+            <select
+              value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '12px', outline: 'none', cursor: 'pointer' }}
             >
@@ -241,8 +228,8 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 400 }}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-muted)' }}>
-             <div className="animate-spin" style={{ width: 24, height: 24, border: '3px solid rgba(56,189,248,0.2)', borderTopColor: '#38bdf8', borderRadius: '50%', marginRight: '0.75rem' }} />
-             Fetching Archive...
+            <div className="animate-spin" style={{ width: 24, height: 24, border: '3px solid rgba(56,189,248,0.2)', borderTopColor: '#38bdf8', borderRadius: '50%', marginRight: '0.75rem' }} />
+            Fetching Archive...
           </div>
         ) : filteredStudies.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '3rem', textAlign: 'center' }}>
@@ -259,14 +246,14 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
             {currentStudies.map((study) => (
               <div key={study.id} className="card hover:shadow-lg animate-fade-in" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'all 0.2s', border: '1px solid var(--surface-border)' }}>
                 {/* Thumbnail */}
-                <div 
+                <div
                   style={{ height: 160, background: '#0a0e14', position: 'relative', borderBottom: '1px solid var(--surface-border)', cursor: onViewReport ? 'pointer' : 'default' }}
                   onClick={() => onViewReport && onViewReport(study)}
                 >
-                  <img 
-                    src={study.overlay_image_url || study.enhanced_image_url || study.image_url || echoSample} 
-                    alt="Echocardiogram" 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} 
+                  <img
+                    src={study.overlay_image_url || study.enhanced_image_url || study.image_url || echoSample}
+                    alt="Echocardiogram"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
                   />
                 </div>
 
@@ -275,8 +262,8 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                         <User style={{ width: 14, height: 14, color: 'var(--accent-indigo)' }} />
-                         {study.patient_name}
+                        <User style={{ width: 14, height: 14, color: 'var(--accent-indigo)' }} />
+                        {study.patient_name}
                       </h3>
                       <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'monospace' }}>ID: {study.patient_id || 'Not Assigned'}</p>
                     </div>
@@ -348,10 +335,10 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
             Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredStudies.length)} of {filteredStudies.length} studies
           </span>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="btn-secondary" 
+              className="btn-secondary"
               style={{ padding: '0.4rem 0.6rem', opacity: currentPage === 1 ? 0.5 : 1, cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
             >
               <ChevronLeft style={{ width: 14, height: 14 }} />
@@ -359,10 +346,10 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
             <div style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
               Page {currentPage} of {totalPages}
             </div>
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="btn-secondary" 
+              className="btn-secondary"
               style={{ padding: '0.4rem 0.6rem', opacity: currentPage === totalPages ? 0.5 : 1, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
             >
               <ChevronRight style={{ width: 14, height: 14 }} />
@@ -394,11 +381,11 @@ export default function ArchivePage({ onViewReport }: ArchivePageProps) {
               <button className="btn-secondary" onClick={() => setStudyToDelete(null)} style={{ padding: '0.6rem 1.25rem' }}>
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={confirmDelete}
-                style={{ 
-                  padding: '0.6rem 1.25rem', background: '#ef4444', color: 'white', 
-                  border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '13px', cursor: 'pointer' 
+                style={{
+                  padding: '0.6rem 1.25rem', background: '#ef4444', color: 'white',
+                  border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '13px', cursor: 'pointer'
                 }}
               >
                 Delete

@@ -1,49 +1,22 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useStudies } from '../hooks/useStudies';
 import { Clock, Download, Activity, Loader2, AlertCircle } from 'lucide-react';
 
 export default function PatientHistory() {
-    const [studies, setStudies] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    // Fetch the data from our Supabase database on load!
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    async function loadData() {
-        try {
-            setLoading(true);
-            setError(null);
-            const { data, error } = await supabase
-                .from('studies')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            setStudies(data || []);
-        } catch (err: any) {
-            console.error("Error fetching studies", err);
-            setError(err.message || "Failed to load patient history");
-        } finally {
-            setLoading(false);
-        }
-    }
+    const { studies, loading, error } = useStudies();
 
     const handleDownloadPDF = async (study: any) => {
         // We hit the brand new Python FPDF endpoint we just built!
         try {
-            const response = await fetch('http://127.0.0.1:5000/api/generate_pdf', { 
+            const response = await fetch('http://127.0.0.1:5000/api/generate_pdf', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(study)
             });
-            
+
             if (!response.ok) {
                 throw new Error('Failed to generate PDF');
             }
-            
+
             const data = await response.json();
 
             if (data.pdf_base64) {
